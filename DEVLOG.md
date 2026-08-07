@@ -1,0 +1,11 @@
+# DEVLOG
+
+## 2026-08-06 — Decisão: configuração inicial do Claude Code e esqueleto do projeto
+Contexto: início do projeto cumulativo do Módulo 5 da trilha de estudo Claude Code — aplicar hooks, modelo de risco, TDD e documentação de processo desde a primeira linha, não só depois que o código já existe.
+Decisão: Spring Boot 3.3.4 + Java 21 + Maven; Postgres real (Docker Compose local, Testcontainers em teste) em vez de H2, para não mascarar a diferença entre ambiente local e produção (M4 A4); refresh token persistido no banco para permitir invalidação real no logout; RBAC como enum simples na entidade User (YAGNI); erros de API em RFC 7807; hash de senha em BCrypt; assinatura de JWT em HS256.
+Alternativa descartada: H2 em memória (mais simples de rodar, mas enfraquece a prática de M4 A4); RBAC com entidade Role separada (mais flexível, mas complexidade que o escopo v1 não pediu); RS256 para o JWT (só compensa se outro serviço precisasse validar o token sem o segredo).
+
+## 2026-08-07 — Gotcha: Testcontainers x Docker Desktop atual (API version)
+Contexto: ao rodar `mvn test` pela primeira vez (Task 1), o Testcontainers falhava com `BadRequestException (Status 400)` tanto via named pipe quanto via TCP, mesmo com `docker info`/`docker ps` funcionando normalmente. Decompilando o bytecode do Testcontainers 1.20.1/1.21.3 (não há versão publicada mais recente que corrija isso), confirmou-se que `DockerClientProviderStrategy` força a API do Docker para `1.32` quando não detecta a versão do daemon — e o Docker Engine local exige no mínimo `1.44`, rejeitando a conexão.
+Decisão: fixar `api.version=1.44` como `systemPropertyVariable` do `maven-surefire-plugin` no `pom.xml`, para que `mvn test` funcione sozinho em qualquer máquina com esse Docker Desktop, sem depender de flag manual ou de expor o daemon via TCP.
+Alternativa descartada: expor o daemon Docker via `tcp://localhost:2375` sem TLS (funcionava, mas é um socket root-equivalente sem autenticação — desnecessário, já que o named pipe funciona normalmente uma vez fixada a `api.version`); atualizar o Testcontainers para a versão mais recente (1.21.3) — testado e não resolve, pois o hardcode de `1.32` está presente também nessa versão; rebaixar o Docker Desktop — resolveria, mas é uma mudança de sistema fora do escopo deste projeto.
