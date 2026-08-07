@@ -1,0 +1,62 @@
+package dev.lucasvital.auth;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@Testcontainers
+class UserRegistrationTest {
+
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
+
+    @Autowired private TestRestTemplate restTemplate;
+
+    @Test
+    void registerWithValidEmailAndPassword_returns201AndPersistsHashedPasswordWithUserRole()
+            throws Exception {
+        String email = "novo.usuario@example.com";
+        String password = "senha-valida-123";
+
+        ResponseEntity<Void> response =
+                restTemplate.postForEntity(
+                        "/auth/register", Map.of("email", email, "password", password), Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "select password_hash, role from users where email = ?")) {
+            statement.setString(1, email);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+
+                String passwordHash = resultSet.getString("password_hash");
+                String role = resultSet.getString("role");
+
+                assertThat(passwordHash).isNotEqualTo(password);
+                assertThat(new BCryptPasswordEncoder().matches(password, passwordHash)).isTrue();
+                assertThat(role).isEqualTo("USER");
+            }
+        }
+    }
+}
