@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": ["Bash(mvn *)", "Bash(docker compose *)", "Read", "Edit", "Write"],
+    "ask": ["Bash(git push*)"],
+    "deny": ["Read(.env)", "Edit(.env)", "Write(.env)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // empty' | { read -r cmd; case \"$cmd\" in *--force*|*\\ -f\\ *) echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"push --force bloqueado por regra do projeto (M3 A2 / M5)\"}}';; *) echo '{}';; esac; }"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *.java) mvn -q com.coveo:fmt-maven-plugin:format >/dev/null 2>&1 || true;; esac; }; true"
+          }
+        ]
+      }
+    ]
+  }
+}
