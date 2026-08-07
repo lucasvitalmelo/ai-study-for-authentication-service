@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth_service
+    username: auth
+    password: auth_dev_password
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+server:
+  port: 8080
