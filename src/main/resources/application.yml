@@ -12,5 +12,10 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+app:
+  jwt:
+    secret: "dev-only-secret-nao-usar-em-producao-precisa-ter-32-bytes-no-minimo"
+    access-token-ttl: PT15M
+    refresh-token-ttl: P7D
 server:
   port: 8080
