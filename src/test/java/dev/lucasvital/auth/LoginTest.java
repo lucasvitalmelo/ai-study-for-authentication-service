@@ -19,6 +19,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Map;
 import javax.crypto.SecretKey;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +28,9 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -44,6 +47,16 @@ class LoginTest {
 
     @Value("${app.jwt.secret}")
     private String jwtSecret;
+
+    @BeforeEach
+    void useApacheHttpClient() {
+        // O HttpURLConnection padrao do JDK (usado pelo SimpleClientHttpRequestFactory) quebra
+        // com "cannot retry due to server authentication, in streaming mode" ao ler uma resposta
+        // 401 de um POST — ele sempre usa setFixedLengthStreamingMode internamente, mesmo com
+        // outputStreaming=false. Troca pro Apache HttpClient, que nao tem esse problema. E'
+        // questao do client HTTP do teste, nao da aplicacao.
+        restTemplate.getRestTemplate().setRequestFactory(new HttpComponentsClientHttpRequestFactory());
+    }
 
     @Test
     void loginWithValidCredentials_returns200WithAccessAndRefreshTokens() throws Exception {
@@ -112,5 +125,47 @@ class LoginTest {
                         .isBefore(Instant.now().plus(8, ChronoUnit.DAYS));
             }
         }
+    }
+
+    @Test
+    void loginWithNonExistentEmail_returns401AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/login",
+                        Map.of("email", "inexistente@example.com", "password", "qualquer-senha"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("detail").asText()).isEqualTo("Credenciais inválidas");
+    }
+
+    @Test
+    void loginWithWrongPassword_returns401AsProblemDetailWithSameMessageAsNonExistentEmail()
+            throws Exception {
+        String email = "login.senha.errada@example.com";
+
+        restTemplate.postForEntity(
+                "/auth/register",
+                Map.of("email", email, "password", "senha-correta-123"),
+                Void.class);
+
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/login",
+                        Map.of("email", email, "password", "senha-errada-456"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("detail").asText()).isEqualTo("Credenciais inválidas");
     }
 }

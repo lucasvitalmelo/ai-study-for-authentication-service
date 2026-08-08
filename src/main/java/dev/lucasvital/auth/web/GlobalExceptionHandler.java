@@ -1,5 +1,6 @@
 package dev.lucasvital.auth.web;
 
+import dev.lucasvital.auth.login.InvalidCredentialsException;
 import dev.lucasvital.auth.user.EmailAlreadyRegisteredException;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,15 @@ public class GlobalExceptionHandler {
         problemDetail.setTitle("E-mail já cadastrado");
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCredentials(InvalidCredentialsException ex) {
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problemDetail.setTitle("Falha na autenticação");
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

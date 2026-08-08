@@ -32,10 +32,13 @@ public class LoginController {
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-        User user = userRepository.findByEmail(request.email().toLowerCase(Locale.ROOT)).orElseThrow();
+        User user =
+                userRepository
+                        .findByEmail(request.email().toLowerCase(Locale.ROOT))
+                        .orElseThrow(InvalidCredentialsException::new);
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new IllegalStateException("credenciais invalidas");
+            throw new InvalidCredentialsException();
         }
 
         String accessToken = jwtService.generateAccessToken(user);
