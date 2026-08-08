@@ -84,4 +84,57 @@ class UserRegistrationTest {
         assertThat(body.get("status").asInt()).isEqualTo(409);
         assertThat(body.has("title")).isTrue();
     }
+
+    @Test
+    void registerWithInvalidEmailFormat_returns400AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/register",
+                        Map.of("email", "email-invalido", "password", "senha-valida-123"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+    }
+
+    @Test
+    void registerWithBlankPassword_returns400AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/register",
+                        Map.of("email", "outro.usuario@example.com", "password", ""),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+    }
+
+    @Test
+    void registerWithEmailDifferingOnlyInCase_returns409AsProblemDetail() throws Exception {
+        restTemplate.postForEntity(
+                "/auth/register",
+                Map.of("email", "user@example.com", "password", "senha-valida-123"),
+                Void.class);
+
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/register",
+                        Map.of("email", "User@Example.com", "password", "outra-senha-456"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(409);
+    }
 }

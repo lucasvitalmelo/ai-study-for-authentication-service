@@ -1,5 +1,6 @@
 package dev.lucasvital.auth.user;
 
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,13 +22,14 @@ public class RegisterUserController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<Void> register(@RequestBody RegisterUserRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new EmailAlreadyRegisteredException(request.email());
+    public ResponseEntity<Void> register(@Valid @RequestBody RegisterUserRequest request) {
+        String email = request.email().toLowerCase();
+
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyRegisteredException(email);
         }
 
-        User user =
-                new User(request.email(), passwordEncoder.encode(request.password()), Role.USER);
+        User user = new User(email, passwordEncoder.encode(request.password()), Role.USER);
         userRepository.save(user);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
