@@ -2,6 +2,8 @@ package dev.lucasvital.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -13,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -58,5 +61,27 @@ class UserRegistrationTest {
                 assertThat(role).isEqualTo("USER");
             }
         }
+    }
+
+    @Test
+    void registerWithAlreadyRegisteredEmail_returns409AsProblemDetail() throws Exception {
+        String email = "duplicado@example.com";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", "senha-valida-123"), Void.class);
+
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/register",
+                        Map.of("email", email, "password", "outra-senha-456"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(409);
+        assertThat(body.has("title")).isTrue();
     }
 }

@@ -22,6 +22,10 @@ public class RegisterUserController {
 
     @PostMapping("/register")
     public ResponseEntity<Void> register(@RequestBody RegisterUserRequest request) {
+        if (userRepository.existsByEmail(request.email())) {
+            throw new EmailAlreadyRegisteredException(request.email());
+        }
+
         User user =
                 new User(request.email(), passwordEncoder.encode(request.password()), Role.USER);
         userRepository.save(user);
