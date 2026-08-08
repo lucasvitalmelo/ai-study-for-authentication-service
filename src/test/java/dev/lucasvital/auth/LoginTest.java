@@ -168,4 +168,36 @@ class LoginTest {
         assertThat(body.get("status").asInt()).isEqualTo(401);
         assertThat(body.get("detail").asText()).isEqualTo("Credenciais inválidas");
     }
+
+    @Test
+    void loginWithInvalidEmailFormat_returns400AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/login",
+                        Map.of("email", "email-invalido", "password", "qualquer-senha"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+    }
+
+    @Test
+    void loginWithBlankPassword_returns400AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/login",
+                        Map.of("email", "alguem@example.com", "password", ""),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+    }
 }

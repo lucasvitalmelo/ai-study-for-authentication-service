@@ -2,6 +2,7 @@ package dev.lucasvital.auth.login;
 
 import dev.lucasvital.auth.user.User;
 import dev.lucasvital.auth.user.UserRepository;
+import jakarta.validation.Valid;
 import java.util.Locale;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,7 +32,7 @@ public class LoginController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         User user =
                 userRepository
                         .findByEmail(request.email().toLowerCase(Locale.ROOT))
