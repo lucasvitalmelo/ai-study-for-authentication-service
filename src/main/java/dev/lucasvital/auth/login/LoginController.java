@@ -4,6 +4,7 @@ import dev.lucasvital.auth.user.User;
 import dev.lucasvital.auth.user.UserRepository;
 import jakarta.validation.Valid;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +20,7 @@ public class LoginController {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final String dummyPasswordHash;
 
     public LoginController(
             UserRepository userRepository,
@@ -29,21 +31,25 @@ public class LoginController {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
+        // Hash fixo so para a comparacao pagar o mesmo custo de BCrypt quando o e-mail nao
+        // existe, evitando que o tempo de resposta revele se o e-mail esta cadastrado.
+        this.dummyPasswordHash = passwordEncoder.encode("dummy-password-para-mitigar-timing-attack");
     }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        User user =
-                userRepository
-                        .findByEmail(request.email().toLowerCase(Locale.ROOT))
-                        .orElseThrow(InvalidCredentialsException::new);
+        Optional<User> user = userRepository.findByEmail(request.email().toLowerCase(Locale.ROOT));
 
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        String hashToCheck = user.map(User::getPasswordHash).orElse(dummyPasswordHash);
+        boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCheck);
+
+        if (user.isEmpty() || !passwordMatches) {
             throw new InvalidCredentialsException();
         }
 
-        String accessToken = jwtService.generateAccessToken(user);
-        String refreshToken = refreshTokenService.issue(user.getId());
+        User authenticatedUser = user.get();
+        String accessToken = jwtService.generateAccessToken(authenticatedUser);
+        String refreshToken = refreshTokenService.issue(authenticatedUser.getId());
 
         return ResponseEntity.ok(new LoginResponse(accessToken, refreshToken));
     }

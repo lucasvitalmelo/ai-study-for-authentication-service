@@ -170,6 +170,23 @@ class LoginTest {
     }
 
     @Test
+    void loginWithNonExistentEmail_paysSameBcryptCostAsWrongPassword() throws Exception {
+        // Se o path de e-mail inexistente pular a verificacao de senha (BCrypt leva
+        // algumas dezenas de ms), a resposta volta quase instantanea — revelando por
+        // timing que o e-mail nao existe, mesmo com o corpo da resposta identico.
+        long start = System.nanoTime();
+
+        restTemplate.postForEntity(
+                "/auth/login",
+                Map.of("email", "sem-essa-conta@example.com", "password", "qualquer-senha"),
+                String.class);
+
+        long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+
+        assertThat(elapsedMillis).isGreaterThanOrEqualTo(20);
+    }
+
+    @Test
     void loginWithInvalidEmailFormat_returns400AsProblemDetail() throws Exception {
         ResponseEntity<String> response =
                 restTemplate.postForEntity(
@@ -183,6 +200,8 @@ class LoginTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("email");
     }
 
     @Test
@@ -199,5 +218,52 @@ class LoginTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("password");
+    }
+
+    @Test
+    void secondLoginDoesNotInvalidatePreviousRefreshToken() throws Exception {
+        String email = "multisessao@example.com";
+        String password = "senha-valida-123";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", password), Void.class);
+
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        ResponseEntity<String> firstLogin =
+                restTemplate.postForEntity(
+                        "/auth/login", Map.of("email", email, "password", password), String.class);
+        ResponseEntity<String> secondLogin =
+                restTemplate.postForEntity(
+                        "/auth/login", Map.of("email", email, "password", password), String.class);
+
+        String firstRefreshToken =
+                objectMapper.readTree(firstLogin.getBody()).get("refreshToken").asText();
+        String secondRefreshToken =
+                objectMapper.readTree(secondLogin.getBody()).get("refreshToken").asText();
+
+        assertThat(firstRefreshToken).isNotEqualTo(secondRefreshToken);
+
+        String firstTokenHash =
+                HexFormat.of()
+                        .formatHex(
+                                MessageDigest.getInstance("SHA-256")
+                                        .digest(firstRefreshToken.getBytes(StandardCharsets.UTF_8)));
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "select count(*) from refresh_tokens where token_hash = ?")) {
+            statement.setString(1, firstTokenHash);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                assertThat(resultSet.getInt(1))
+                        .as("primeiro refresh token deve continuar na tabela apos o 2o login")
+                        .isEqualTo(1);
+            }
+        }
     }
 }
