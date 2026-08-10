@@ -33,6 +33,8 @@ public class RefreshController {
                         .findValid(request.refreshToken())
                         .orElseThrow(InvalidRefreshTokenException::new);
 
+        // Defensivo: hoje inalcancavel — refresh_tokens.user_id tem FK NOT NULL para users
+        // sem cascade, entao nao ha como excluir um usuario com refresh token ativo.
         User user =
                 userRepository
                         .findById(refreshToken.getUserId())

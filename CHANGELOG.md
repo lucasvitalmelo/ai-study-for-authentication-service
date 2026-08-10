@@ -13,6 +13,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   token opaco persistido em hash SHA-256 (expira em 7 dias, múltiplas sessões permitidas),
   401 RFC 7807 genérico para credenciais inválidas (sem enumeração de usuário, incluindo
   proteção contra timing side-channel), 400 RFC 7807 para e-mail/senha inválidos. (#4)
+- Refresh de access token (`POST /auth/refresh`): troca refresh token válido por novo
+  access token JWT, sem rotacionar o refresh token original; 401 RFC 7807 genérico para
+  token inexistente ou expirado (mesma mensagem nos dois casos); 400 RFC 7807 para
+  refreshToken vazio. Adiciona índice único em `refresh_tokens.token_hash`. (#7)
 
 ### Fixed
 - `GlobalExceptionHandler` sem precedência explícita deixava o `ProblemDetailsExceptionHandler`
