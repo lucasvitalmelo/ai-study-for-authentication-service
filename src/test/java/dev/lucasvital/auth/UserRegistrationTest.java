@@ -105,7 +105,10 @@ class UserRegistrationTest {
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(409);
         assertThat(body.get("title").asText()).isEqualTo("E-mail já cadastrado");
-        assertThat(body.get("detail").asText()).contains(email);
+        assertThat(body.get("detail").asText())
+                .as("detail nao deve expor qual e-mail esta cadastrado (evita enumeracao)")
+                .doesNotContain(email)
+                .isEqualTo("E-mail já cadastrado");
     }
 
     @Test
@@ -164,7 +167,10 @@ class UserRegistrationTest {
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(409);
         assertThat(body.get("title").asText()).isEqualTo("E-mail já cadastrado");
-        assertThat(body.get("detail").asText()).contains("user@example.com");
+        assertThat(body.get("detail").asText())
+                .as("detail nao deve expor qual e-mail esta cadastrado (evita enumeracao)")
+                .doesNotContain("user@example.com")
+                .isEqualTo("E-mail já cadastrado");
     }
 
     @Test

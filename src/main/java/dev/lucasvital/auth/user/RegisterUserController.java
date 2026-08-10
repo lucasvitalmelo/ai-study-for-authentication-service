@@ -29,7 +29,7 @@ public class RegisterUserController {
         String email = request.email().toLowerCase(Locale.ROOT);
 
         if (userRepository.existsByEmail(email)) {
-            throw new EmailAlreadyRegisteredException(email);
+            throw new EmailAlreadyRegisteredException();
         }
 
         User user = new User(email, passwordEncoder.encode(request.password()), Role.USER);
@@ -39,7 +39,7 @@ public class RegisterUserController {
         } catch (DataIntegrityViolationException ex) {
             // corrida: outra requisicao concorrente registrou o mesmo e-mail entre o
             // existsByEmail acima e este save; a constraint unica do banco e quem pega.
-            throw new EmailAlreadyRegisteredException(email);
+            throw new EmailAlreadyRegisteredException();
         }
 
         return ResponseEntity.created(URI.create("/users/" + user.getId()))
