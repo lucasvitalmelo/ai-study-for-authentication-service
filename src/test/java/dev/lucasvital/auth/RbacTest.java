@@ -4,7 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
+import javax.crypto.SecretKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +61,37 @@ class RbacTest {
     void meWithMalformedAuthorizationHeader_returns401AsProblemDetail() throws Exception {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "isso-nao-e-bearer-token");
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+    }
+
+    @Test
+    void meWithTokenSignedByAnotherKey_returns401AsProblemDetail() throws Exception {
+        SecretKey anotherKey =
+                Keys.hmacShaKeyFor(
+                        "outra-chave-que-nao-e-a-configurada-no-app-32-bytes"
+                                .getBytes(StandardCharsets.UTF_8));
+
+        String tokenWithInvalidSignature =
+                Jwts.builder()
+                        .subject("1")
+                        .claim("role", "USER")
+                        .issuedAt(Date.from(Instant.now()))
+                        .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(15))))
+                        .signWith(anotherKey, Jwts.SIG.HS256)
+                        .compact();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + tokenWithInvalidSignature);
 
         ResponseEntity<String> response =
                 restTemplate.exchange(
