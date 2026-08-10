@@ -22,6 +22,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -51,17 +52,28 @@ class PasswordResetTest {
     @Autowired private TestRestTemplate restTemplate;
     @Autowired private PasswordResetTokenRepository passwordResetTokenRepository;
 
+    private final Logger passwordResetServiceLogger =
+            (Logger) LoggerFactory.getLogger("dev.lucasvital.auth.passwordreset.PasswordResetService");
+    private ListAppender<ILoggingEvent> attachedAppender;
+
     @BeforeEach
     void useApacheHttpClient() {
         restTemplate.getRestTemplate().setRequestFactory(new HttpComponentsClientHttpRequestFactory());
     }
 
+    @AfterEach
+    void detachLogAppender() {
+        if (attachedAppender != null) {
+            passwordResetServiceLogger.detachAppender(attachedAppender);
+            attachedAppender.stop();
+        }
+    }
+
     private ListAppender<ILoggingEvent> attachLogAppender() {
-        Logger logger =
-                (Logger) LoggerFactory.getLogger("dev.lucasvital.auth.passwordreset.PasswordResetService");
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
-        logger.addAppender(appender);
+        passwordResetServiceLogger.addAppender(appender);
+        attachedAppender = appender;
         return appender;
     }
 
