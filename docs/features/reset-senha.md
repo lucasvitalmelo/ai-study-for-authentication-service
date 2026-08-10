@@ -47,6 +47,11 @@ feature futura.
   todos os refresh tokens existentes do usuário — trata-se de um evento de
   segurança (troca de credencial), então sessões antigas não devem
   continuar válidas, mesmo em outros dispositivos.
+- Pelo mesmo motivo, um reset de senha bem-sucedido também invalida
+  qualquer outro token de reset pendente do mesmo usuário (ex.: usuário
+  solicitou reset mais de uma vez): só o token efetivamente usado deveria
+  sobreviver até ser consumido, mas nenhum "irmão" continua utilizável
+  depois que a senha já mudou.
 - Decisão consultada e confirmada: TTL do token de reset é 15 minutos —
   mesma janela do access token JWT (`app.jwt.access-token-ttl`), nova
   propriedade de configuração dedicada (ex.: `app.password-reset.token-ttl`).

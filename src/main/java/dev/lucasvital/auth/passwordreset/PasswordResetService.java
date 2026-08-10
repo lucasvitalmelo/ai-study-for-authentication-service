@@ -73,7 +73,7 @@ public class PasswordResetService {
         user.changePasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
-        passwordResetTokenRepository.deleteByTokenHash(tokenHash);
+        passwordResetTokenRepository.deleteByUserId(user.getId());
         refreshTokenRepository.deleteByUserId(user.getId());
     }
 

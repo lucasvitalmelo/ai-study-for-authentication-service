@@ -188,6 +188,39 @@ class PasswordResetTest {
     }
 
     @Test
+    void passwordResetConfirmWithValidToken_invalidatesOtherPendingResetTokensOfSameUser() {
+        String email = "reset.multiplos-tokens@example.com";
+        String oldPassword = "senha-antiga-123";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", oldPassword), Void.class);
+
+        ListAppender<ILoggingEvent> appender = attachLogAppender();
+
+        restTemplate.postForEntity("/auth/password-reset", Map.of("email", email), Void.class);
+        String firstToken = extractLoggedToken(appender);
+        appender.list.clear();
+
+        restTemplate.postForEntity("/auth/password-reset", Map.of("email", email), Void.class);
+        String secondToken = extractLoggedToken(appender);
+
+        restTemplate.postForEntity(
+                "/auth/password-reset/confirm",
+                Map.of("token", firstToken, "newPassword", "senha-nova-456"),
+                Void.class);
+
+        ResponseEntity<String> confirmWithSiblingToken =
+                restTemplate.postForEntity(
+                        "/auth/password-reset/confirm",
+                        Map.of("token", secondToken, "newPassword", "outra-senha-789"),
+                        String.class);
+
+        assertThat(confirmWithSiblingToken.getStatusCode())
+                .as("token de reset irmao, pendente, deve ser invalidado quando outro e usado")
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void passwordResetConfirmWithNonExistentToken_returns401AsProblemDetail() throws Exception {
         ResponseEntity<String> response =
                 restTemplate.postForEntity(
