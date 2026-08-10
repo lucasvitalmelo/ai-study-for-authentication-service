@@ -1,6 +1,7 @@
 package dev.lucasvital.auth.web;
 
 import dev.lucasvital.auth.login.InvalidCredentialsException;
+import dev.lucasvital.auth.login.InvalidRefreshTokenException;
 import dev.lucasvital.auth.user.EmailAlreadyRegisteredException;
 import java.util.stream.Collectors;
 import org.springframework.core.Ordered;
@@ -34,6 +35,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ProblemDetail> handleInvalidCredentials(InvalidCredentialsException ex) {
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problemDetail.setTitle("Falha na autenticação");
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
         ProblemDetail problemDetail =
                 ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problemDetail.setTitle("Falha na autenticação");
