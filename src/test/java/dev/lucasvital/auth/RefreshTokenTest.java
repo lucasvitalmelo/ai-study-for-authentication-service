@@ -208,4 +208,38 @@ class RefreshTokenTest {
         assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
         assertThat(body.get("detail").asText()).contains("refreshToken");
     }
+
+    @Test
+    void loginPersistsRefreshTokenExpiresAtReadableCorrectlyViaRawJdbc_regardlessOfSessionTimeZone()
+            throws Exception {
+        // issue #20: refresh_tokens.expires_at era TIMESTAMP sem timezone; lido via JDBC cru
+        // (sem Calendar/fuso explicito) o valor vinha deslocado pelo offset do fuso local da
+        // sessao. Le via JDBC cru de proposito, sem passar pelo Hibernate, para provar que a
+        // leitura externa tambem esta correta apos a migration para TIMESTAMPTZ.
+        String email = "refresh-fuso@example.com";
+        String password = "senha-valida-123";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", password), Void.class);
+        restTemplate.postForEntity(
+                "/auth/login", Map.of("email", email, "password", password), String.class);
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "select rt.expires_at from refresh_tokens rt"
+                                        + " join users u on u.id = rt.user_id"
+                                        + " where u.email = ?")) {
+            statement.setString(1, email);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                Instant expiresAt = resultSet.getTimestamp("expires_at").toInstant();
+
+                assertThat(expiresAt)
+                        .isAfter(Instant.now().plus(7 * 24 * 60 - 1, ChronoUnit.MINUTES))
+                        .isBefore(Instant.now().plus(7 * 24 * 60 + 1, ChronoUnit.MINUTES));
+            }
+        }
+    }
 }

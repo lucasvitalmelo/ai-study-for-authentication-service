@@ -205,6 +205,27 @@ class LoginTest {
     }
 
     @Test
+    void loginWithEmailLongerThan255Chars_returns400AsProblemDetail() throws Exception {
+        String label = "a".repeat(60);
+        String email = "a".repeat(50) + "@" + label + "." + label + "." + label + "." + label + ".com";
+
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/login",
+                        Map.of("email", email, "password", "qualquer-senha"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("email");
+    }
+
+    @Test
     void loginWithBlankPassword_returns400AsProblemDetail() throws Exception {
         ResponseEntity<String> response =
                 restTemplate.postForEntity(

@@ -19,7 +19,13 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
@@ -136,6 +142,38 @@ class PasswordResetTest {
                 .as("TTL de 15 minutos")
                 .isAfter(Instant.now().plus(14, ChronoUnit.MINUTES))
                 .isBefore(Instant.now().plus(16, ChronoUnit.MINUTES));
+    }
+
+    @Test
+    void passwordResetPersistsExpiresAtReadableCorrectlyViaRawJdbc_regardlessOfSessionTimeZone()
+            throws Exception {
+        // issue #20: password_reset_tokens.expires_at era TIMESTAMP sem timezone; lido via
+        // JDBC cru (sem Calendar/fuso explicito) o valor vinha deslocado pelo offset do fuso
+        // local da sessao. Le via JDBC cru de proposito, sem passar pelo Hibernate, para
+        // provar que a leitura externa tambem esta correta apos a migration para TIMESTAMPTZ.
+        String email = "reset-fuso@example.com";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", "senha-valida-123"), Void.class);
+        restTemplate.postForEntity("/auth/password-reset", Map.of("email", email), Void.class);
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "select prt.expires_at from password_reset_tokens prt"
+                                        + " join users u on u.id = prt.user_id"
+                                        + " where u.email = ?")) {
+            statement.setString(1, email);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                Instant expiresAt = resultSet.getTimestamp("expires_at").toInstant();
+
+                assertThat(expiresAt)
+                        .isAfter(Instant.now().plus(14, ChronoUnit.MINUTES))
+                        .isBefore(Instant.now().plus(16, ChronoUnit.MINUTES));
+            }
+        }
     }
 
     @Test
@@ -354,5 +392,75 @@ class PasswordResetTest {
         assertThat(body.get("status").asInt()).isEqualTo(400);
         assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
         assertThat(body.get("detail").asText()).contains("newPassword");
+    }
+
+    @Test
+    void passwordResetConfirmWithNewPasswordLongerThan72Bytes_returns400AsProblemDetail()
+            throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/password-reset/confirm",
+                        Map.of("token", "qualquer-token", "newPassword", "a".repeat(73)),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("newPassword");
+    }
+
+    @Test
+    void passwordResetConfirmConcurrentRequestsWithSameToken_onlyOneSucceeds() throws Exception {
+        String email = "reset.concorrencia@example.com";
+        String oldPassword = "senha-antiga-123";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", oldPassword), Void.class);
+
+        ListAppender<ILoggingEvent> appender = attachLogAppender();
+        restTemplate.postForEntity("/auth/password-reset", Map.of("email", email), Void.class);
+        String token = extractLoggedToken(appender);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch go = new CountDownLatch(1);
+
+            List<Future<org.springframework.http.HttpStatusCode>> futures =
+                    List.of(
+                            executor.submit(() -> attemptConfirm(token, "senha-concorrente-1", ready, go)),
+                            executor.submit(() -> attemptConfirm(token, "senha-concorrente-2", ready, go)));
+
+            ready.await();
+            go.countDown();
+
+            List<org.springframework.http.HttpStatusCode> results = new java.util.ArrayList<>();
+            for (Future<org.springframework.http.HttpStatusCode> future : futures) {
+                results.add(future.get(10, TimeUnit.SECONDS));
+            }
+
+            assertThat(results)
+                    .as("exatamente uma das duas requisicoes concorrentes deve consumir o token")
+                    .containsExactlyInAnyOrder(HttpStatus.NO_CONTENT, HttpStatus.UNAUTHORIZED);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private org.springframework.http.HttpStatusCode attemptConfirm(
+            String token, String newPassword, CountDownLatch ready, CountDownLatch go)
+            throws InterruptedException {
+        ready.countDown();
+        go.await();
+        return restTemplate
+                .postForEntity(
+                        "/auth/password-reset/confirm",
+                        Map.of("token", token, "newPassword", newPassword),
+                        Void.class)
+                .getStatusCode();
     }
 }
