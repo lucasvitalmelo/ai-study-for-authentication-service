@@ -71,6 +71,8 @@ class RbacTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("title").asText()).isEqualTo("Falha na autenticação");
+        assertThat(body.get("detail").asText()).isEqualTo("Token de acesso inválido ou ausente");
     }
 
     @Test
@@ -88,6 +90,8 @@ class RbacTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("title").asText()).isEqualTo("Falha na autenticação");
+        assertThat(body.get("detail").asText()).isEqualTo("Token de acesso inválido ou ausente");
     }
 
     @Test
@@ -119,6 +123,8 @@ class RbacTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("title").asText()).isEqualTo("Falha na autenticação");
+        assertThat(body.get("detail").asText()).isEqualTo("Token de acesso inválido ou ausente");
     }
 
     @Test
@@ -147,6 +153,97 @@ class RbacTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("title").asText()).isEqualTo("Falha na autenticação");
+        assertThat(body.get("detail").asText()).isEqualTo("Token de acesso inválido ou ausente");
+    }
+
+    @Test
+    void meWithTokenMissingRoleClaim_returns401AsProblemDetail() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+
+        String tokenWithoutRole =
+                Jwts.builder()
+                        .subject("1")
+                        .issuedAt(Date.from(Instant.now()))
+                        .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(15))))
+                        .signWith(key, Jwts.SIG.HS256)
+                        .compact();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + tokenWithoutRole);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("title").asText()).isEqualTo("Falha na autenticação");
+        assertThat(body.get("detail").asText()).isEqualTo("Token de acesso inválido ou ausente");
+    }
+
+    @Test
+    void meWithTokenHavingInvalidRoleValue_returns401AsProblemDetail() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+
+        String tokenWithInvalidRole =
+                Jwts.builder()
+                        .subject("1")
+                        .claim("role", "SUPERUSER")
+                        .issuedAt(Date.from(Instant.now()))
+                        .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(15))))
+                        .signWith(key, Jwts.SIG.HS256)
+                        .compact();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + tokenWithInvalidRole);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("title").asText()).isEqualTo("Falha na autenticação");
+        assertThat(body.get("detail").asText()).isEqualTo("Token de acesso inválido ou ausente");
+    }
+
+    @Test
+    void meWithTokenHavingNonNumericSubject_returns401AsProblemDetail() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+
+        String tokenWithNonNumericSubject =
+                Jwts.builder()
+                        .subject("nao-e-um-id-numerico")
+                        .claim("role", "USER")
+                        .issuedAt(Date.from(Instant.now()))
+                        .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(15))))
+                        .signWith(key, Jwts.SIG.HS256)
+                        .compact();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + tokenWithNonNumericSubject);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("title").asText()).isEqualTo("Falha na autenticação");
+        assertThat(body.get("detail").asText()).isEqualTo("Token de acesso inválido ou ausente");
     }
 
     @Test
@@ -232,5 +329,7 @@ class RbacTest {
 
         JsonNode body = objectMapper.readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(403);
+        assertThat(body.get("title").asText()).isEqualTo("Acesso negado");
+        assertThat(body.get("detail").asText()).isEqualTo("Acesso negado para o seu papel");
     }
 }

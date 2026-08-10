@@ -45,10 +45,14 @@ public class JwtService {
         try {
             Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(accessToken).getPayload();
 
-            Long userId = Long.valueOf(claims.getSubject());
-            Role role = Role.valueOf(claims.get("role", String.class));
+            String subject = claims.getSubject();
+            String roleClaim = claims.get("role", String.class);
 
-            return new CurrentUser(userId, role);
+            if (subject == null || roleClaim == null) {
+                throw new InvalidAccessTokenException();
+            }
+
+            return new CurrentUser(Long.valueOf(subject), Role.valueOf(roleClaim));
         } catch (JwtException | IllegalArgumentException ex) {
             throw new InvalidAccessTokenException();
         }

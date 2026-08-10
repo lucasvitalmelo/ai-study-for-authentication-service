@@ -17,7 +17,8 @@ public class UserController {
 
     @GetMapping("/me")
     public UserResponse me(@AuthenticatedUser CurrentUser currentUser) {
-        // Defensivo: hoje inalcancavel — nao ha endpoint que exclua o proprio usuario logado.
+        // Defensivo: nenhum endpoint deleta usuarios hoje, mas o token continua valido
+        // ate expirar mesmo que a linha seja removida manualmente do banco.
         User user =
                 userRepository
                         .findById(currentUser.userId())
