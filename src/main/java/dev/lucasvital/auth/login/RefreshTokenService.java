@@ -43,6 +43,10 @@ public class RefreshTokenService {
                 .filter(refreshToken -> refreshToken.getExpiresAt().isAfter(Instant.now()));
     }
 
+    public void revoke(String token) {
+        refreshTokenRepository.deleteByTokenHash(hash(token));
+    }
+
     private String hash(String token) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
