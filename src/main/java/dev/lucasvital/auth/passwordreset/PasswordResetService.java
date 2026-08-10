@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,15 +44,23 @@ public class PasswordResetService {
         this.tokenTtl = Duration.parse(tokenTtl);
     }
 
-    public void issue(Long userId, String email) {
+    public void requestReset(String email) {
+        Optional<User> user = userRepository.findByEmail(email);
+
+        // Gera e hasheia o token sempre, mesmo que o e-mail nao exista, para que os dois
+        // casos paguem o mesmo custo de CPU e nao revelem por timing quais e-mails estao
+        // cadastrados — mesmo motivo do dummyPasswordHash em LoginController.
         byte[] randomBytes = new byte[32];
         secureRandom.nextBytes(randomBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        String tokenHash = hash(token);
 
-        passwordResetTokenRepository.save(
-                new PasswordResetToken(userId, hash(token), Instant.now().plus(tokenTtl)));
+        if (user.isPresent()) {
+            passwordResetTokenRepository.save(
+                    new PasswordResetToken(user.get().getId(), tokenHash, Instant.now().plus(tokenTtl)));
 
-        log.info("Token de reset de senha gerado para email={}: token={}", email, token);
+            log.info("Token de reset de senha gerado para email={}: token={}", email, token);
+        }
     }
 
     @Transactional
