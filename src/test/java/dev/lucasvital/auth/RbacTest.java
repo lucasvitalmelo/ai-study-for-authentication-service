@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.lucasvital.auth.login.JwtService;
+import dev.lucasvital.auth.user.Role;
+import dev.lucasvital.auth.user.User;
+import dev.lucasvital.auth.user.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -11,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
+import java.util.stream.StreamSupport;
 import javax.crypto.SecretKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +32,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -43,6 +49,12 @@ class RbacTest {
 
     @Value("${app.jwt.secret}")
     private String jwtSecret;
+
+    @Autowired private UserRepository userRepository;
+
+    @Autowired private PasswordEncoder passwordEncoder;
+
+    @Autowired private JwtService jwtService;
 
     @BeforeEach
     void useApacheHttpClient() {
@@ -165,5 +177,30 @@ class RbacTest {
         assertThat(body.get("email").asText()).isEqualTo(email);
         assertThat(body.get("role").asText()).isEqualTo("USER");
         assertThat(body.get("id").asLong()).isPositive();
+    }
+
+    @Test
+    void listUsersWithAdminToken_returns200WithAllUsers() throws Exception {
+        String adminEmail = "rbac.admin@example.com";
+        User admin =
+                userRepository.save(
+                        new User(adminEmail, passwordEncoder.encode("senha-valida-123"), Role.ADMIN));
+        String adminAccessToken = jwtService.generateAccessToken(admin);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + adminAccessToken);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.isArray()).isTrue();
+        boolean containsAdmin =
+                StreamSupport.stream(body.spliterator(), false)
+                        .anyMatch(node -> node.get("email").asText().equals(adminEmail));
+        assertThat(containsAdmin).isTrue();
     }
 }
