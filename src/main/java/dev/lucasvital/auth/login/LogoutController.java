@@ -1,5 +1,6 @@
 package dev.lucasvital.auth.login;
 
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,7 +18,7 @@ public class LogoutController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestBody LogoutRequest request) {
+    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
         refreshTokenService.revoke(request.refreshToken());
         return ResponseEntity.noContent().build();
     }
