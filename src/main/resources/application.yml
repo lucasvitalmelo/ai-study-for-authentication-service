@@ -17,5 +17,7 @@ app:
     secret: "dev-only-secret-nao-usar-em-producao-precisa-ter-32-bytes-no-minimo"
     access-token-ttl: PT15M
     refresh-token-ttl: P7D
+  password-reset:
+    token-ttl: PT15M
 server:
   port: 8080

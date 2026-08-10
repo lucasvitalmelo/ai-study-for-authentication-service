@@ -2,6 +2,7 @@ package dev.lucasvital.auth.web;
 
 import dev.lucasvital.auth.login.InvalidCredentialsException;
 import dev.lucasvital.auth.login.InvalidRefreshTokenException;
+import dev.lucasvital.auth.passwordreset.InvalidPasswordResetTokenException;
 import dev.lucasvital.auth.user.EmailAlreadyRegisteredException;
 import dev.lucasvital.auth.user.ForbiddenRoleException;
 import dev.lucasvital.auth.user.InvalidAccessTokenException;
@@ -55,6 +56,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidAccessTokenException.class)
     public ResponseEntity<ProblemDetail> handleInvalidAccessToken(InvalidAccessTokenException ex) {
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problemDetail.setTitle("Falha na autenticação");
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidPasswordResetTokenException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidPasswordResetToken(
+            InvalidPasswordResetTokenException ex) {
         ProblemDetail problemDetail =
                 ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problemDetail.setTitle("Falha na autenticação");
