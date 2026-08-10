@@ -27,6 +27,14 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   inválida ou expirado; 403 RFC 7807 para role sem permissão. Sem Spring Security — um
   único `HandlerMethodArgumentResolver` valida o token com o `JwtService` já existente.
   (#11)
+- Reset de senha (`POST /auth/password-reset` e `POST /auth/password-reset/confirm`):
+  token opaco gerado e logado (sem provedor de e-mail real nesta v1), hasheado em
+  SHA-256 e persistido com TTL de 15 minutos; 202 idempotente e sem diferenciar e-mail
+  cadastrado de não cadastrado (anti-enumeração, custo de CPU equalizado entre os dois
+  casos). Confirmação troca a senha (BCrypt), consome o token usado e qualquer outro
+  token de reset pendente do mesmo usuário, e revoga todos os refresh tokens existentes
+  (evento de segurança); 401 RFC 7807 genérico para token inexistente/expirado/já usado;
+  400 RFC 7807 para e-mail ou nova senha inválidos. (#16)
 
 ### Fixed
 - `GlobalExceptionHandler` sem precedência explícita deixava o `ProblemDetailsExceptionHandler`
