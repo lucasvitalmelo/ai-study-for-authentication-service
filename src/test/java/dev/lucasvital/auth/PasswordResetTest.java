@@ -19,7 +19,13 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
@@ -354,5 +360,56 @@ class PasswordResetTest {
         assertThat(body.get("status").asInt()).isEqualTo(400);
         assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
         assertThat(body.get("detail").asText()).contains("newPassword");
+    }
+
+    @Test
+    void passwordResetConfirmConcurrentRequestsWithSameToken_onlyOneSucceeds() throws Exception {
+        String email = "reset.concorrencia@example.com";
+        String oldPassword = "senha-antiga-123";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", oldPassword), Void.class);
+
+        ListAppender<ILoggingEvent> appender = attachLogAppender();
+        restTemplate.postForEntity("/auth/password-reset", Map.of("email", email), Void.class);
+        String token = extractLoggedToken(appender);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch go = new CountDownLatch(1);
+
+            List<Future<org.springframework.http.HttpStatusCode>> futures =
+                    List.of(
+                            executor.submit(() -> attemptConfirm(token, "senha-concorrente-1", ready, go)),
+                            executor.submit(() -> attemptConfirm(token, "senha-concorrente-2", ready, go)));
+
+            ready.await();
+            go.countDown();
+
+            List<org.springframework.http.HttpStatusCode> results = new java.util.ArrayList<>();
+            for (Future<org.springframework.http.HttpStatusCode> future : futures) {
+                results.add(future.get(10, TimeUnit.SECONDS));
+            }
+
+            assertThat(results)
+                    .as("exatamente uma das duas requisicoes concorrentes deve consumir o token")
+                    .containsExactlyInAnyOrder(HttpStatus.NO_CONTENT, HttpStatus.UNAUTHORIZED);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private org.springframework.http.HttpStatusCode attemptConfirm(
+            String token, String newPassword, CountDownLatch ready, CountDownLatch go)
+            throws InterruptedException {
+        ready.countDown();
+        go.await();
+        return restTemplate
+                .postForEntity(
+                        "/auth/password-reset/confirm",
+                        Map.of("token", token, "newPassword", newPassword),
+                        Void.class)
+                .getStatusCode();
     }
 }

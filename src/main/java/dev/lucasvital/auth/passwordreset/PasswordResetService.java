@@ -63,7 +63,7 @@ public class PasswordResetService {
         String tokenHash = opaqueTokenGenerator.hash(token);
         PasswordResetToken resetToken =
                 passwordResetTokenRepository
-                        .findByTokenHash(tokenHash)
+                        .findByTokenHashForUpdate(tokenHash)
                         .filter(t -> t.getExpiresAt().isAfter(Instant.now()))
                         .orElseThrow(InvalidPasswordResetTokenException::new);
 
