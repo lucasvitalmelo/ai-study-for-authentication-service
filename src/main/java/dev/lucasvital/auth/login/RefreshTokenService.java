@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -34,6 +35,12 @@ public class RefreshTokenService {
                 new RefreshToken(userId, hash(token), Instant.now().plus(refreshTokenTtl)));
 
         return token;
+    }
+
+    public Optional<RefreshToken> findValid(String token) {
+        return refreshTokenRepository
+                .findByTokenHash(hash(token))
+                .filter(refreshToken -> refreshToken.getExpiresAt().isAfter(Instant.now()));
     }
 
     private String hash(String token) {
