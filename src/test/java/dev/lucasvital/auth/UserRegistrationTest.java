@@ -94,7 +94,8 @@ class UserRegistrationTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(409);
-        assertThat(body.has("title")).isTrue();
+        assertThat(body.get("title").asText()).isEqualTo("E-mail já cadastrado");
+        assertThat(body.get("detail").asText()).contains(email);
     }
 
     @Test
@@ -111,6 +112,8 @@ class UserRegistrationTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("email");
     }
 
     @Test
@@ -127,6 +130,8 @@ class UserRegistrationTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("password");
     }
 
     @Test
@@ -148,6 +153,8 @@ class UserRegistrationTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(409);
+        assertThat(body.get("title").asText()).isEqualTo("E-mail já cadastrado");
+        assertThat(body.get("detail").asText()).contains("user@example.com");
     }
 
     @Test
@@ -223,6 +230,8 @@ class UserRegistrationTest {
 
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("email");
     }
 
     @Test
