@@ -4,6 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -76,6 +87,65 @@ class LogoutTest {
                         Void.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    void logoutWithExpiredToken_returns204IdempotentlyAndRemovesRow() throws Exception {
+        String email = "logout.expirado@example.com";
+        String password = "senha-valida-123";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", password), Void.class);
+
+        long userId;
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement("select id from users where email = ?")) {
+            statement.setString(1, email);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                userId = resultSet.getLong("id");
+            }
+        }
+
+        byte[] randomBytes = new byte[32];
+        new SecureRandom().nextBytes(randomBytes);
+        String expiredToken = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        String expiredTokenHash =
+                HexFormat.of()
+                        .formatHex(
+                                MessageDigest.getInstance("SHA-256")
+                                        .digest(expiredToken.getBytes(StandardCharsets.UTF_8)));
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "insert into refresh_tokens (user_id, token_hash, expires_at)"
+                                        + " values (?, ?, ?)")) {
+            statement.setLong(1, userId);
+            statement.setString(2, expiredTokenHash);
+            statement.setTimestamp(3, Timestamp.from(Instant.now().minus(1, ChronoUnit.DAYS)));
+            statement.executeUpdate();
+        }
+
+        var response =
+                restTemplate.postForEntity(
+                        "/auth/logout", Map.of("refreshToken", expiredToken), Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "select count(*) from refresh_tokens where token_hash = ?")) {
+            statement.setString(1, expiredTokenHash);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                assertThat(resultSet.getInt(1))
+                        .as("linha do token expirado deve ser removida pelo logout")
+                        .isEqualTo(0);
+            }
+        }
     }
 
     @Test
