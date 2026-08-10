@@ -257,4 +257,22 @@ class PasswordResetTest {
         assertThat(body.get("status").asInt()).isEqualTo(401);
         assertThat(body.get("detail").asText()).isEqualTo("Token de reset de senha inválido");
     }
+
+    @Test
+    void passwordResetConfirmWithBlankNewPassword_returns400AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/password-reset/confirm",
+                        Map.of("token", "qualquer-token", "newPassword", ""),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("newPassword");
+    }
 }
