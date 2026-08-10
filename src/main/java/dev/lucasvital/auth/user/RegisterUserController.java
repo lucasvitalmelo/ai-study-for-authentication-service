@@ -1,6 +1,7 @@
 package dev.lucasvital.auth.user;
 
 import jakarta.validation.Valid;
+import java.net.URI;
 import java.util.Locale;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -24,7 +25,7 @@ public class RegisterUserController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<Void> register(@Valid @RequestBody RegisterUserRequest request) {
+    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterUserRequest request) {
         String email = request.email().toLowerCase(Locale.ROOT);
 
         if (userRepository.existsByEmail(email)) {
@@ -41,6 +42,7 @@ public class RegisterUserController {
             throw new EmailAlreadyRegisteredException(email);
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+        return ResponseEntity.created(URI.create("/users/" + user.getId()))
+                .body(UserResponse.from(user));
     }
 }

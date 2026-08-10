@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -45,26 +46,28 @@ class UserRegistrationTest {
     @Autowired private TestRestTemplate restTemplate;
 
     @Test
-    void registerWithValidEmailAndPassword_returns201AndPersistsHashedPasswordWithUserRole()
+    void registerWithValidEmailAndPassword_returns201WithLocationAndBodyAndPersistsHashedPasswordWithUserRole()
             throws Exception {
         String email = "novo.usuario@example.com";
         String password = "senha-valida-123";
 
-        ResponseEntity<Void> response =
+        ResponseEntity<String> response =
                 restTemplate.postForEntity(
-                        "/auth/register", Map.of("email", email, "password", password), Void.class);
+                        "/auth/register", Map.of("email", email, "password", password), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
+        long userId;
         try (Connection connection = postgres.createConnection("");
                 PreparedStatement statement =
                         connection.prepareStatement(
-                                "select password_hash, role from users where email = ?")) {
+                                "select id, password_hash, role from users where email = ?")) {
             statement.setString(1, email);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 assertThat(resultSet.next()).isTrue();
 
+                userId = resultSet.getLong("id");
                 String passwordHash = resultSet.getString("password_hash");
                 String role = resultSet.getString("role");
 
@@ -73,6 +76,13 @@ class UserRegistrationTest {
                 assertThat(role).isEqualTo("USER");
             }
         }
+
+        assertThat(response.getHeaders().getLocation()).isEqualTo(URI.create("/users/" + userId));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("id").asLong()).isEqualTo(userId);
+        assertThat(body.get("email").asText()).isEqualTo(email);
+        assertThat(body.get("role").asText()).isEqualTo("USER");
     }
 
     @Test
