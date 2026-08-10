@@ -21,6 +21,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   tanto para token existente/válido quanto para inexistente ou já expirado; 400 RFC 7807
   para refreshToken vazio. Não afeta o access token JWT já emitido (stateless, expira
   sozinho em 15min). (#9)
+- RBAC e endpoint protegido: `GET /users/me` (qualquer usuário autenticado, devolve
+  id/email/role do próprio token) e `GET /users` (somente `ADMIN`, lista todos os
+  usuários); 401 RFC 7807 genérico para access token ausente, malformado, com assinatura
+  inválida ou expirado; 403 RFC 7807 para role sem permissão. Sem Spring Security — um
+  único `HandlerMethodArgumentResolver` valida o token com o `JwtService` já existente.
+  (#11)
 
 ### Fixed
 - `GlobalExceptionHandler` sem precedência explícita deixava o `ProblemDetailsExceptionHandler`

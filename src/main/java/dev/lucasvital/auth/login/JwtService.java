@@ -1,6 +1,11 @@
 package dev.lucasvital.auth.login;
 
+import dev.lucasvital.auth.user.CurrentUser;
+import dev.lucasvital.auth.user.InvalidAccessTokenException;
+import dev.lucasvital.auth.user.Role;
 import dev.lucasvital.auth.user.User;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -34,5 +39,22 @@ public class JwtService {
                 .expiration(Date.from(now.plus(accessTokenTtl)))
                 .signWith(key, Jwts.SIG.HS256)
                 .compact();
+    }
+
+    public CurrentUser parseAccessToken(String accessToken) {
+        try {
+            Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(accessToken).getPayload();
+
+            String subject = claims.getSubject();
+            String roleClaim = claims.get("role", String.class);
+
+            if (subject == null || roleClaim == null) {
+                throw new InvalidAccessTokenException();
+            }
+
+            return new CurrentUser(Long.valueOf(subject), Role.valueOf(roleClaim));
+        } catch (JwtException | IllegalArgumentException ex) {
+            throw new InvalidAccessTokenException();
+        }
     }
 }

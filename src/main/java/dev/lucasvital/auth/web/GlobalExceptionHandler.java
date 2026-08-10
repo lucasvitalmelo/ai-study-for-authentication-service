@@ -3,6 +3,8 @@ package dev.lucasvital.auth.web;
 import dev.lucasvital.auth.login.InvalidCredentialsException;
 import dev.lucasvital.auth.login.InvalidRefreshTokenException;
 import dev.lucasvital.auth.user.EmailAlreadyRegisteredException;
+import dev.lucasvital.auth.user.ForbiddenRoleException;
+import dev.lucasvital.auth.user.InvalidAccessTokenException;
 import java.util.stream.Collectors;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -49,6 +51,24 @@ public class GlobalExceptionHandler {
         problemDetail.setTitle("Falha na autenticação");
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidAccessTokenException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidAccessToken(InvalidAccessTokenException ex) {
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problemDetail.setTitle("Falha na autenticação");
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail);
+    }
+
+    @ExceptionHandler(ForbiddenRoleException.class)
+    public ResponseEntity<ProblemDetail> handleForbiddenRole(ForbiddenRoleException ex) {
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problemDetail.setTitle("Acesso negado");
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problemDetail);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
