@@ -15,6 +15,7 @@ import javax.crypto.SecretKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -39,6 +40,9 @@ class RbacTest {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired private TestRestTemplate restTemplate;
+
+    @Value("${app.jwt.secret}")
+    private String jwtSecret;
 
     @BeforeEach
     void useApacheHttpClient() {
@@ -92,6 +96,34 @@ class RbacTest {
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + tokenWithInvalidSignature);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+    }
+
+    @Test
+    void meWithExpiredToken_returns401AsProblemDetail() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+
+        String expiredToken =
+                Jwts.builder()
+                        .subject("1")
+                        .claim("role", "USER")
+                        .issuedAt(Date.from(Instant.now().minus(Duration.ofMinutes(30))))
+                        .expiration(Date.from(Instant.now().minus(Duration.ofMinutes(15))))
+                        .signWith(key, Jwts.SIG.HS256)
+                        .compact();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + expiredToken);
 
         ResponseEntity<String> response =
                 restTemplate.exchange(
