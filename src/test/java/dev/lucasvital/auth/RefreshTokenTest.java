@@ -192,4 +192,20 @@ class RefreshTokenTest {
         assertThat(body.get("status").asInt()).isEqualTo(401);
         assertThat(body.get("detail").asText()).isEqualTo("Refresh token inválido");
     }
+
+    @Test
+    void refreshWithBlankToken_returns400AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/refresh", Map.of("refreshToken", ""), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("refreshToken");
+    }
 }
