@@ -10,11 +10,14 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Map;
 import javax.crypto.SecretKey;
@@ -118,5 +121,75 @@ class RefreshTokenTest {
                         .isEqualTo(1);
             }
         }
+    }
+
+    @Test
+    void refreshWithNonExistentToken_returns401AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/refresh",
+                        Map.of("refreshToken", "token-que-nunca-existiu"),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("detail").asText()).isEqualTo("Refresh token inválido");
+    }
+
+    @Test
+    void refreshWithExpiredToken_returns401AsProblemDetailWithSameMessageAsNonExistentToken()
+            throws Exception {
+        String email = "refresh.expirado@example.com";
+        String password = "senha-valida-123";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", password), Void.class);
+
+        long userId;
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement("select id from users where email = ?")) {
+            statement.setString(1, email);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                userId = resultSet.getLong("id");
+            }
+        }
+
+        byte[] randomBytes = new byte[32];
+        new SecureRandom().nextBytes(randomBytes);
+        String expiredToken = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        String expiredTokenHash =
+                HexFormat.of()
+                        .formatHex(
+                                MessageDigest.getInstance("SHA-256")
+                                        .digest(expiredToken.getBytes(StandardCharsets.UTF_8)));
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "insert into refresh_tokens (user_id, token_hash, expires_at)"
+                                        + " values (?, ?, ?)")) {
+            statement.setLong(1, userId);
+            statement.setString(2, expiredTokenHash);
+            statement.setTimestamp(3, Timestamp.from(Instant.now().minus(1, ChronoUnit.DAYS)));
+            statement.executeUpdate();
+        }
+
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/refresh", Map.of("refreshToken", expiredToken), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+        assertThat(body.get("detail").asText()).isEqualTo("Refresh token inválido");
     }
 }
