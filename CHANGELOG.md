@@ -17,6 +17,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
   access token JWT, sem rotacionar o refresh token original; 401 RFC 7807 genérico para
   token inexistente ou expirado (mesma mensagem nos dois casos); 400 RFC 7807 para
   refreshToken vazio. Adiciona índice único em `refresh_tokens.token_hash`. (#7)
+- Logout (`POST /auth/logout`): revoga (remove) o refresh token informado; 204 idempotente
+  tanto para token existente/válido quanto para inexistente ou já expirado; 400 RFC 7807
+  para refreshToken vazio. Não afeta o access token JWT já emitido (stateless, expira
+  sozinho em 15min). (#9)
 
 ### Fixed
 - `GlobalExceptionHandler` sem precedência explícita deixava o `ProblemDetailsExceptionHandler`
