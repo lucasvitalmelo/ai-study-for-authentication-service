@@ -245,6 +245,26 @@ class UserRegistrationTest {
     }
 
     @Test
+    void registerWithPasswordLongerThan72Bytes_returns400AsProblemDetail() throws Exception {
+        String password = "a".repeat(73);
+
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/register",
+                        Map.of("email", "senha.longa@example.com", "password", password),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("password");
+    }
+
+    @Test
     void registerWithMalformedJsonBody_returns400AsProblemDetail() throws Exception {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
