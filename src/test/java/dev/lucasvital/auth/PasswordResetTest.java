@@ -76,4 +76,20 @@ class PasswordResetTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(extractLoggedToken(appender)).isNotBlank();
     }
+
+    @Test
+    void passwordResetRequestWithNonExistentEmail_returns202SameAsExistingWithoutLoggingToken() {
+        ListAppender<ILoggingEvent> appender = attachLogAppender();
+
+        ResponseEntity<Void> response =
+                restTemplate.postForEntity(
+                        "/auth/password-reset",
+                        Map.of("email", "nao.cadastrado@example.com"),
+                        Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(appender.list)
+                .as("nenhum token deve ser gerado/logado para e-mail nao cadastrado")
+                .isEmpty();
+    }
 }
