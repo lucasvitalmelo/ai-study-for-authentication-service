@@ -40,3 +40,20 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 - `GlobalExceptionHandler` sem precedência explícita deixava o `ProblemDetailsExceptionHandler`
   interno do Spring Boot descartar a mensagem de detalhe por campo nos erros 400 de validação
   desde a feature de cadastro; corrigido com `@Order(HIGHEST_PRECEDENCE)`. (#4)
+- Triagem do backlog de follow-ups das revisões adversariais anteriores:
+  `POST /auth/register` passa a devolver `Location` e corpo (id/email/role) no 201 (#2);
+  senha nova (cadastro e confirmação de reset) maior que 72 bytes é rejeitada com 400 em
+  vez de truncada silenciosamente pelo BCrypt (#2); `LoginRequest.email` ganha
+  `@Size(max=255)`, alinhado com `RegisterUserRequest` (#5); 409 de e-mail já cadastrado
+  deixa de expor o e-mail no `detail` (evita enumeração, mesmo motivo já usado em
+  `/auth/login` e `/auth/password-reset`) (#17); consumo de token de reset de senha passa
+  a usar lock pessimista, corrigindo uma corrida read-then-delete que permitia usar o
+  mesmo token duas vezes concorrentemente (#19); colunas `TIMESTAMP` sem timezone em
+  `users`, `refresh_tokens` e `password_reset_tokens` migradas para `TIMESTAMPTZ` — não
+  era bug de produção (app sempre lê/escreve via Hibernate, path internamente
+  consistente), mas um risco real para qualquer leitura fora da aplicação (#20).
+
+### Changed
+- Extrai `OpaqueTokenGenerator` compartilhado entre `RefreshTokenService` e
+  `PasswordResetService`, eliminando duas cópias idênticas de geração/hash de token
+  opaco. Refactor puro, sem mudança de comportamento. (#18)
