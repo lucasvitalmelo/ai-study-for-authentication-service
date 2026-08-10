@@ -12,6 +12,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +41,23 @@ class RbacTest {
     @Test
     void meWithoutAuthorizationHeader_returns401AsProblemDetail() throws Exception {
         ResponseEntity<String> response = restTemplate.getForEntity("/users/me", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
+
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(401);
+    }
+
+    @Test
+    void meWithMalformedAuthorizationHeader_returns401AsProblemDetail() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "isso-nao-e-bearer-token");
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getHeaders().getContentType())
