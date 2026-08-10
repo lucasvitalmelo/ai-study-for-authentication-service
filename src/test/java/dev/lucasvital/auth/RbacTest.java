@@ -136,4 +136,34 @@ class RbacTest {
         JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(401);
     }
+
+    @Test
+    void meWithValidToken_returns200WithOwnIdEmailAndRole() throws Exception {
+        String email = "rbac.me.valido@example.com";
+        String password = "senha-valida-123";
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", password), Void.class);
+
+        ResponseEntity<String> loginResponse =
+                restTemplate.postForEntity(
+                        "/auth/login", Map.of("email", email, "password", password), String.class);
+        String accessToken =
+                objectMapper.readTree(loginResponse.getBody()).get("accessToken").asText();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + accessToken);
+
+        ResponseEntity<String> response =
+                restTemplate.exchange(
+                        "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        JsonNode body = objectMapper.readTree(response.getBody());
+        assertThat(body.get("email").asText()).isEqualTo(email);
+        assertThat(body.get("role").asText()).isEqualTo("USER");
+        assertThat(body.get("id").asLong()).isPositive();
+    }
 }
