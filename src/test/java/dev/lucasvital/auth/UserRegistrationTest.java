@@ -10,6 +10,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -83,6 +85,34 @@ class UserRegistrationTest {
         assertThat(body.get("id").asLong()).isEqualTo(userId);
         assertThat(body.get("email").asText()).isEqualTo(email);
         assertThat(body.get("role").asText()).isEqualTo("USER");
+    }
+
+    @Test
+    void registerPersistsCreatedAtReadableCorrectlyViaRawJdbc_regardlessOfSessionTimeZone()
+            throws Exception {
+        // issue #20: users.created_at era TIMESTAMP sem timezone; lido via JDBC cru (sem
+        // Calendar/fuso explicito) o valor vinha deslocado pelo offset do fuso local da
+        // sessao. Le via JDBC cru de proposito, sem passar pelo Hibernate, para provar que
+        // a leitura externa tambem esta correta apos a migration para TIMESTAMPTZ.
+        String email = "created-at-fuso@example.com";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", "senha-valida-123"), Void.class);
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement("select created_at from users where email = ?")) {
+            statement.setString(1, email);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                Instant createdAt = resultSet.getTimestamp("created_at").toInstant();
+
+                assertThat(createdAt)
+                        .isAfter(Instant.now().minus(1, ChronoUnit.MINUTES))
+                        .isBefore(Instant.now().plus(1, ChronoUnit.MINUTES));
+            }
+        }
     }
 
     @Test

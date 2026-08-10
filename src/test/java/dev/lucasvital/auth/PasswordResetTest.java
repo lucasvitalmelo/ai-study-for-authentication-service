@@ -145,6 +145,38 @@ class PasswordResetTest {
     }
 
     @Test
+    void passwordResetPersistsExpiresAtReadableCorrectlyViaRawJdbc_regardlessOfSessionTimeZone()
+            throws Exception {
+        // issue #20: password_reset_tokens.expires_at era TIMESTAMP sem timezone; lido via
+        // JDBC cru (sem Calendar/fuso explicito) o valor vinha deslocado pelo offset do fuso
+        // local da sessao. Le via JDBC cru de proposito, sem passar pelo Hibernate, para
+        // provar que a leitura externa tambem esta correta apos a migration para TIMESTAMPTZ.
+        String email = "reset-fuso@example.com";
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", "senha-valida-123"), Void.class);
+        restTemplate.postForEntity("/auth/password-reset", Map.of("email", email), Void.class);
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "select prt.expires_at from password_reset_tokens prt"
+                                        + " join users u on u.id = prt.user_id"
+                                        + " where u.email = ?")) {
+            statement.setString(1, email);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                Instant expiresAt = resultSet.getTimestamp("expires_at").toInstant();
+
+                assertThat(expiresAt)
+                        .isAfter(Instant.now().plus(14, ChronoUnit.MINUTES))
+                        .isBefore(Instant.now().plus(16, ChronoUnit.MINUTES));
+            }
+        }
+    }
+
+    @Test
     void passwordResetRequestWithNonExistentEmail_returns202SameAsExistingWithoutLoggingToken() {
         ListAppender<ILoggingEvent> appender = attachLogAppender();
 
