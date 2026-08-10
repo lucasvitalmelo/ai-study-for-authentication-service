@@ -1,13 +1,8 @@
 package dev.lucasvital.auth.login;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+import dev.lucasvital.auth.security.OpaqueTokenGenerator;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
-import java.util.HexFormat;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -16,43 +11,35 @@ import org.springframework.stereotype.Component;
 public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final OpaqueTokenGenerator opaqueTokenGenerator;
     private final Duration refreshTokenTtl;
-    private final SecureRandom secureRandom = new SecureRandom();
 
     public RefreshTokenService(
             RefreshTokenRepository refreshTokenRepository,
+            OpaqueTokenGenerator opaqueTokenGenerator,
             @Value("${app.jwt.refresh-token-ttl}") String refreshTokenTtl) {
         this.refreshTokenRepository = refreshTokenRepository;
+        this.opaqueTokenGenerator = opaqueTokenGenerator;
         this.refreshTokenTtl = Duration.parse(refreshTokenTtl);
     }
 
     public String issue(Long userId) {
-        byte[] randomBytes = new byte[32];
-        secureRandom.nextBytes(randomBytes);
-        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        String token = opaqueTokenGenerator.generate();
 
         refreshTokenRepository.save(
-                new RefreshToken(userId, hash(token), Instant.now().plus(refreshTokenTtl)));
+                new RefreshToken(
+                        userId, opaqueTokenGenerator.hash(token), Instant.now().plus(refreshTokenTtl)));
 
         return token;
     }
 
     public Optional<RefreshToken> findValid(String token) {
         return refreshTokenRepository
-                .findByTokenHash(hash(token))
+                .findByTokenHash(opaqueTokenGenerator.hash(token))
                 .filter(refreshToken -> refreshToken.getExpiresAt().isAfter(Instant.now()));
     }
 
     public void revoke(String token) {
-        refreshTokenRepository.deleteByTokenHash(hash(token));
-    }
-
-    private String hash(String token) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(token.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException(ex);
-        }
+        refreshTokenRepository.deleteByTokenHash(opaqueTokenGenerator.hash(token));
     }
 }
