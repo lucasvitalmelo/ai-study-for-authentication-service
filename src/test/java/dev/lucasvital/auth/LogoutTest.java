@@ -66,4 +66,15 @@ class LogoutTest {
                 .as("refresh token revogado nao deve mais funcionar em /auth/refresh")
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    @Test
+    void logoutWithNonExistentToken_returns204Idempotently() {
+        var response =
+                restTemplate.postForEntity(
+                        "/auth/logout",
+                        Map.of("refreshToken", "token-que-nunca-existiu"),
+                        Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
 }
