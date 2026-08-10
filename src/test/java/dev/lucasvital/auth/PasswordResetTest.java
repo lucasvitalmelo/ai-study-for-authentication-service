@@ -7,6 +7,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.lucasvital.auth.passwordreset.PasswordResetTokenRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -48,6 +49,7 @@ class PasswordResetTest {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
 
     @Autowired private TestRestTemplate restTemplate;
+    @Autowired private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @BeforeEach
     void useApacheHttpClient() {
@@ -74,7 +76,7 @@ class PasswordResetTest {
     }
 
     @Test
-    void passwordResetRequestWithExistingEmail_returns202AndLogsToken() {
+    void passwordResetRequestWithExistingEmail_returns202AndLogsToken() throws Exception {
         String email = "reset.solicitar@example.com";
         String password = "senha-valida-123";
 
@@ -88,7 +90,40 @@ class PasswordResetTest {
                         "/auth/password-reset", Map.of("email", email), Void.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
-        assertThat(extractLoggedToken(appender)).isNotBlank();
+        String token = extractLoggedToken(appender);
+        assertThat(token).isNotBlank();
+
+        String tokenHash =
+                HexFormat.of()
+                        .formatHex(
+                                MessageDigest.getInstance("SHA-256")
+                                        .digest(token.getBytes(StandardCharsets.UTF_8)));
+
+        try (Connection connection = postgres.createConnection("");
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "select token_hash from password_reset_tokens where token_hash = ?")) {
+            statement.setString(1, tokenHash);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next())
+                        .as("token deve estar persistido pelo hash, nao pelo valor em texto puro")
+                        .isTrue();
+                assertThat(resultSet.getString("token_hash"))
+                        .as("hash persistido nao deve ser o token em texto puro")
+                        .isNotEqualTo(token);
+            }
+        }
+
+        // Le via o repositorio (mesmo caminho que a aplicacao usa) em vez de JDBC cru: uma
+        // coluna TIMESTAMP sem fuso lida por JDBC puro reinterpreta os digitos gravados pelo
+        // Hibernate (em UTC) usando o fuso local, introduzindo um desvio artificial de horas
+        // que nao existe no caminho real da aplicacao.
+        Instant expiresAt =
+                passwordResetTokenRepository.findByTokenHash(tokenHash).orElseThrow().getExpiresAt();
+        assertThat(expiresAt)
+                .as("TTL de 15 minutos")
+                .isAfter(Instant.now().plus(14, ChronoUnit.MINUTES))
+                .isBefore(Instant.now().plus(16, ChronoUnit.MINUTES));
     }
 
     @Test
