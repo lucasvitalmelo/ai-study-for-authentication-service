@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -17,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -101,12 +104,75 @@ class PasswordResetTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getHeaders().getContentType())
-                .isEqualTo(org.springframework.http.MediaType.valueOf("application/problem+json"));
+                .isEqualTo(MediaType.valueOf("application/problem+json"));
 
-        com.fasterxml.jackson.databind.JsonNode body =
-                new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.getBody());
+        JsonNode body = new ObjectMapper().readTree(response.getBody());
         assertThat(body.get("status").asInt()).isEqualTo(400);
         assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
         assertThat(body.get("detail").asText()).contains("email");
+    }
+
+    @Test
+    void passwordResetConfirmWithValidToken_returns204UpdatesPasswordConsumesTokenAndRevokesRefreshTokens()
+            throws Exception {
+        String email = "reset.confirmar@example.com";
+        String oldPassword = "senha-antiga-123";
+        String newPassword = "senha-nova-456";
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        restTemplate.postForEntity(
+                "/auth/register", Map.of("email", email, "password", oldPassword), Void.class);
+
+        JsonNode loginBody =
+                objectMapper.readTree(
+                        restTemplate
+                                .postForEntity(
+                                        "/auth/login",
+                                        Map.of("email", email, "password", oldPassword),
+                                        String.class)
+                                .getBody());
+        String oldRefreshToken = loginBody.get("refreshToken").asText();
+
+        ListAppender<ILoggingEvent> appender = attachLogAppender();
+        restTemplate.postForEntity("/auth/password-reset", Map.of("email", email), Void.class);
+        String resetToken = extractLoggedToken(appender);
+
+        ResponseEntity<Void> confirmResponse =
+                restTemplate.postForEntity(
+                        "/auth/password-reset/confirm",
+                        Map.of("token", resetToken, "newPassword", newPassword),
+                        Void.class);
+
+        assertThat(confirmResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        ResponseEntity<String> loginWithOldPassword =
+                restTemplate.postForEntity(
+                        "/auth/login", Map.of("email", email, "password", oldPassword), String.class);
+        assertThat(loginWithOldPassword.getStatusCode())
+                .as("senha antiga nao deve mais funcionar")
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        ResponseEntity<String> loginWithNewPassword =
+                restTemplate.postForEntity(
+                        "/auth/login", Map.of("email", email, "password", newPassword), String.class);
+        assertThat(loginWithNewPassword.getStatusCode())
+                .as("nova senha deve funcionar")
+                .isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<String> refreshWithOldToken =
+                restTemplate.postForEntity(
+                        "/auth/refresh", Map.of("refreshToken", oldRefreshToken), String.class);
+        assertThat(refreshWithOldToken.getStatusCode())
+                .as("refresh tokens anteriores ao reset devem ser revogados")
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        ResponseEntity<Void> reuseResetToken =
+                restTemplate.postForEntity(
+                        "/auth/password-reset/confirm",
+                        Map.of("token", resetToken, "newPassword", "outra-senha-789"),
+                        Void.class);
+        assertThat(reuseResetToken.getStatusCode())
+                .as("token de reset ja usado nao pode ser reutilizado")
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 }
