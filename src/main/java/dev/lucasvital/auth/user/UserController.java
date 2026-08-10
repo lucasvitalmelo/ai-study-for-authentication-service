@@ -1,0 +1,37 @@
+package dev.lucasvital.auth.user;
+
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    private final UserRepository userRepository;
+
+    public UserController(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @GetMapping("/me")
+    public UserResponse me(@AuthenticatedUser CurrentUser currentUser) {
+        // Defensivo: hoje inalcancavel — nao ha endpoint que exclua o proprio usuario logado.
+        User user =
+                userRepository
+                        .findById(currentUser.userId())
+                        .orElseThrow(InvalidAccessTokenException::new);
+
+        return UserResponse.from(user);
+    }
+
+    @GetMapping
+    public List<UserResponse> list(@AuthenticatedUser CurrentUser currentUser) {
+        if (currentUser.role() != Role.ADMIN) {
+            throw new ForbiddenRoleException();
+        }
+
+        return userRepository.findAll().stream().map(UserResponse::from).toList();
+    }
+}
