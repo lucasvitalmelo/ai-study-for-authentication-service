@@ -92,4 +92,21 @@ class PasswordResetTest {
                 .as("nenhum token deve ser gerado/logado para e-mail nao cadastrado")
                 .isEmpty();
     }
+
+    @Test
+    void passwordResetRequestWithBlankEmail_returns400AsProblemDetail() throws Exception {
+        ResponseEntity<String> response =
+                restTemplate.postForEntity(
+                        "/auth/password-reset", Map.of("email", ""), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType())
+                .isEqualTo(org.springframework.http.MediaType.valueOf("application/problem+json"));
+
+        com.fasterxml.jackson.databind.JsonNode body =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.getBody());
+        assertThat(body.get("status").asInt()).isEqualTo(400);
+        assertThat(body.get("title").asText()).isEqualTo("Dados de entrada inválidos");
+        assertThat(body.get("detail").asText()).contains("email");
+    }
 }
